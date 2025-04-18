@@ -11,10 +11,9 @@ import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.EventChannel;
-import io.flutter.plugin.common.PluginRegistry;
-
 
 public class FlutterKeyboardVisibilityPlugin implements FlutterPlugin, ActivityAware, EventChannel.StreamHandler, ViewTreeObserver.OnGlobalLayoutListener {
+  private EventChannel eventChannel;
   private EventChannel.EventSink eventSink;
   private View mainView;
   private boolean isVisible;
@@ -25,13 +24,15 @@ public class FlutterKeyboardVisibilityPlugin implements FlutterPlugin, ActivityA
   }
 
   private void init(BinaryMessenger messenger) {
-    final EventChannel eventChannel = new EventChannel(messenger, "flutter_keyboard_visibility");
+    eventChannel = new EventChannel(messenger, "flutter_keyboard_visibility");
     eventChannel.setStreamHandler(this);
   }
 
   @Override
   public void onDetachedFromEngine(FlutterPluginBinding binding) {
+    releaseEventChannel();
     unregisterListener();
+    releaseAll();
   }
 
   @Override
@@ -69,11 +70,7 @@ public class FlutterKeyboardVisibilityPlugin implements FlutterPlugin, ActivityA
     if (mainView != null) {
       Rect r = new Rect();
       mainView.getWindowVisibleDisplayFrame(r);
-
-      // check if the visible part of the screen is less than 85%
-      // if it is then the keyboard is showing
-      boolean newState = ((double)r.height() / (double)mainView.getRootView().getHeight()) < 0.85;
-
+      boolean newState = ((double) r.height() / mainView.getRootView().getHeight()) < 0.85;
       if (newState != isVisible) {
         isVisible = newState;
         if (eventSink != null) {
@@ -84,8 +81,11 @@ public class FlutterKeyboardVisibilityPlugin implements FlutterPlugin, ActivityA
   }
 
   private void listenForKeyboard(Activity activity) {
-    mainView = activity.<ViewGroup>findViewById(android.R.id.content);
-    mainView.getViewTreeObserver().addOnGlobalLayoutListener(this);
+    unregisterListener(); // 避免重复注册
+    mainView = activity.findViewById(android.R.id.content);
+    if (mainView != null) {
+      mainView.getViewTreeObserver().addOnGlobalLayoutListener(this);
+    }
   }
 
   private void unregisterListener() {
@@ -93,5 +93,16 @@ public class FlutterKeyboardVisibilityPlugin implements FlutterPlugin, ActivityA
       mainView.getViewTreeObserver().removeOnGlobalLayoutListener(this);
       mainView = null;
     }
+  }
+
+  private void releaseEventChannel() {
+    if (eventChannel != null) {
+      eventChannel.setStreamHandler(null);
+      eventChannel = null;
+    }
+  }
+
+  private void releaseAll() {
+    eventSink = null;
   }
 }
